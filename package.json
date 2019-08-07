@@ -12,20 +12,22 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "axios": "^0.18.0",
-    "bluebird": "^3.5.1",
-    "chance": "^1.0.16",
+    "axios": "^0.18.1",
+    "bluebird": "^3.5.5",
+    "chance": "^1.0.18",
     "extendable-error": "^0.1.5",
+    "js-uuid": "0.0.6",
     "minimist": "^1.2.0",
     "msgpack-lite": "^0.1.26",
-    "uuid": "^3.2.1",
-    "zeromq": "^4.6.0"
+    "utf8": "^3.0.0",
+    "uuid": "^3.3.2",
+    "zeromq": "^5.1.0"
   },
   "devDependencies": {
     "eslint": "^4.19.1",
     "eslint-config-airbnb": "^16.1.0",
-    "eslint-plugin-import": "^2.11.0",
-    "eslint-plugin-jsx-a11y": "^6.0.3",
-    "eslint-plugin-react": "^7.7.0"
+    "eslint-plugin-import": "^2.18.0",
+    "eslint-plugin-jsx-a11y": "^6.2.3",
+    "eslint-plugin-react": "^7.14.2"
   }
 }

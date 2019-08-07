@@ -1,5 +1,4 @@
 const uuid = require('uuid/v4');
-
 const logger = require('./logger');
 const { TaskSet } = require('./task-set');
 const { RequestError } = require('./error');
@@ -15,7 +14,7 @@ class Locust {
     this.taskSet = null;
 
     this.state = STATES.IDLE;
-    this.locustId = uuid();
+    this.locustId = "loc"+uuid();
   }
 
   async start(statsAggregator) {
@@ -58,7 +57,7 @@ class Locust {
           await task();
         } catch (error) {
           if (!(error instanceof RequestError)) {
-            logger.error('Unexpected error occurred', error);
+            _error('Unexpected error occurred', error);
           }
         }
 

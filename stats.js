@@ -35,11 +35,11 @@ class StatsAggregator {
       this.errors[errorHash] = {
         name,
         method,
-        occurences: 0,
+        occurrences: 0,
         error: error.message
       };
     }
-    this.errors[errorHash].occurences += 1;
+    this.errors[errorHash].occurrences += 1;
   }
 
 

@@ -6,12 +6,14 @@ const logger = require('./logger');
 const { StatsAggregator } = require('./stats');
 
 const SECOND = 1000;
-const STATS_SUBMIT_FREQUENCY = 5 * SECOND;
+const STATS_SUBMIT_FREQUENCY = 4 * SECOND;
+const HEARTBEAT_SUBMIT_FREQUENCY = 2 * SECOND;
 const MESSAGES = {
   CLIENT_READY: 'client_ready',
   CLIENT_STOPPED: 'client_stopped',
   HATCH: 'hatch',
   HATCHING: 'hatching',
+  HEARTBEAT: 'heartbeat',
   HATCH_COMPLETE: 'hatch_complete',
   STATS: 'stats',
   STOP: 'stop',
@@ -28,9 +30,10 @@ class Client {
     this.masterPort = masterPort;
     this.Locust = Locust;
     this.locusts = [];
-
+    this.currentState = null;
     this.statsAggregator = new StatsAggregator(this.clientId);
     this.statsNotifier = null;
+    this.heartbeatNotifier = null;
 
     this.messageHandlers = {
       [MESSAGES.HATCH]: data => this.hatch(data),
@@ -38,35 +41,43 @@ class Client {
       [MESSAGES.QUIT]: () => this.quit()
     };
 
-    this.pushSocket = zmq.socket('push');
-    this.pullSocket = zmq.socket('pull');
+    this.pushSocket = zmq.socket('dealer');
+    this.pullSocket = zmq.socket('dealer');
   }
 
   start() {
+    logger.info('Starting at ', this.masterHost, this.masterPort);
     this.pushSocket.connect(`tcp://${this.masterHost}:${this.masterPort}`);
     this.pullSocket.connect(`tcp://${this.masterHost}:${this.masterPort + 1}`);
 
-    this.pullSocket.on('message', this.messageHandler.bind(this));
-
+    this.pushSocket.on('message', this.messageHandler.bind(this));
     this.sendMessage(MESSAGES.CLIENT_READY);
+    this.statsNotifier = setInterval(
+      () =>
+        this.sendStats()
+      , STATS_SUBMIT_FREQUENCY
+    );
 
-    this.statsNotifier = setInterval(() =>
-      this.sendStats()
-    , STATS_SUBMIT_FREQUENCY);
+    this.heartbeatNotifier = setInterval(
+      () =>
+        this.sendHeartbeat()
+      , HEARTBEAT_SUBMIT_FREQUENCY
+    );
   }
 
-  sendMessage(type, data = null) {
+  sendMessage(type, data = "") {
+    if (type !== MESSAGES.HEARTBEAT)
+      this.currentState = type;
+    logger.info("sending message of: ", type, data, this.clientId);
     const encodedData = msgpack.encode([
-      type, data, this.clientId
-    ], { codec });
-
-    this.pushSocket.send(encodedData);
+       type, data, this.clientId
+     ]);
+    return this.pushSocket.send(encodedData);
   }
 
 
   messageHandler(message) {
     const [type, data, clientId] = msgpack.decode(message);
-
     if (!this.messageHandlers[type]) {
       logger.error('Unknown message type', { type, data, clientId });
 
@@ -74,12 +85,54 @@ class Client {
     }
 
     logger.info('Received message', { type, data, clientId });
-
     this.messageHandlers[type](data, clientId);
   }
 
+  sendHeartbeat(){
+    this.sendMessage(MESSAGES.HEARTBEAT, {
+      "state": this.currentState});
+  }
+
+
+  emptyStats()
+  {
+    return {
+      name: "Total",
+      method: null,
+      num_reqs_per_sec: {},
+      response_times: {},
+      errors: {},
+      start_time: 0,
+      last_request_timestamp: parseInt(Date.now()/1000),
+      min_response_time: 12132231,
+      max_response_time: 0,
+      num_failures: 0,
+      num_requests: 0,
+      total_content_length: 0,
+      total_response_time: 0
+    }
+  }
+  
+  createTotalStats(stats)
+  {
+    let st = this.emptyStats();
+    stats.forEach(element => {
+      st.total_content_length += element.total_content_length;
+      if (st.max_response_time < element.max_response_time)
+        st.max_response_time = element.max_response_time;
+      if (st.min_response_time > element.min_response_time)
+        st.min_response_time = element.min_response_time;
+  
+      st.num_failures += element.num_failures;
+      st.num_requests += element.num_requests;
+      st.total_content_length += element.total_content_length;
+      st.total_response_time += element.total_response_time;
+    });
+    return st;
+  }
+
   sendStats() {
-    const stats = Object
+    let stats = Object
       .values(this.statsAggregator.stats)
       .map(requestStats => ({
         name: requestStats.name,
@@ -96,11 +149,21 @@ class Client {
         total_response_time: requestStats.totalResponseTime
       }));
 
+    let stats_total;
     const errors = this.statsAggregator.errors;
+    //stats.errors = errors;
 
+    if (stats.length === 0)
+      stats_total = this.emptyStats();
+    else
+      stats_total = this.createTotalStats(stats);
+    stats_total.errors = errors;
+
+      
     this.sendMessage(MESSAGES.STATS, {
       errors,
       stats,
+      stats_total,
       user_count: this.locusts.length
     });
 
@@ -136,6 +199,8 @@ class Client {
       spawnedLocusts += 1;
 
       if (spawnedLocusts === numClients) {
+
+        console.log("All locusts were spawned: "+spawnedLocusts);
         clearInterval(locustSpawner);
 
         this.locustSpawner = null;
@@ -164,8 +229,10 @@ class Client {
     this.pullSocket.close();
 
     if (this.statsNotifier) clearInterval(this.statsNotifier);
+    if (this.heartbeatNotifier) clearInterval(this.heartbeatNotifier);
     if (this.locustSpawner) clearInterval(this.locustSpawner);
 
+    this.heartbeatNotifier = null;
     this.statsNotifier = null;
     this.locustSpawner = null;
   }

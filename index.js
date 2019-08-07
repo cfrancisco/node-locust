@@ -2,7 +2,7 @@ const path = require('path');
 
 const logger = require('./logger');
 const parseArgs = require('minimist');
-const { Locust } = require('./locust');
+const { Locust, TaskSet } = require('./locust');
 const { Client } = require('./client');
 
 function printUsage() {
@@ -72,6 +72,8 @@ try {
 
   process.exit(1);
 }
+
+logger.log('Locustfile successfully imported and correct params passed.');
 
 const client = new Client(masterHost, masterPort, exportedLocusts[0]);
 
